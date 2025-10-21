@@ -1,0 +1,17 @@
+{
+  "name": "two-room-apartment",
+  "version": "1.0.0",
+  "description": "Interactive 3D Two-Room Apartment built with Three.js",
+  "scripts": {
+    "build": "node ./build.js",
+    "start": "npx http-server -p 8001 -c-1 ."
+  },
+  "license": "MIT",
+  "dependencies": {
+    "three": "0.154.0"
+  },
+  "devDependencies": {
+    "esbuild": "^0.19.0"
+  }
+
+}
