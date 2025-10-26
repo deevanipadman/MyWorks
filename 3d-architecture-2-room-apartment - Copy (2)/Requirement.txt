@@ -1,0 +1,59 @@
+COSC3306 Final Project
+Overview:
+Create an interactive 3D architecture environment using Three.js that demonstrates your
+understanding of 3D modeling, scene composition, lighting, materials, animation, and
+camera control.
+Requirements
+1. Structure
+• Build a complete architecture with at least 2 distinct rooms
+• Include fundamental elements:
+o Walls with appropriate thickness
+o Floor and ceiling
+o Doorways or openings connecting rooms
+• Demonstrate proper use of geometric primitives and/or custom geometries
+2. Room Details and Furnishing
+• Each room must contain:
+- Minimum 3-5 furniture pieces or objects appropriate to the room type
+- Proper scaling and positioning of objects
+- At least 3 diOerent materials with varying properties
+3. Camera Navigation
+Implement smooth camera controls allowing users to:
+• Navigate through all rooms in the home
+• Use OrbitControls or implement custom camera movement
+• Smooth transitions between camera positions (bonus)
+• Collision detection to prevent camera from passing through walls (bonus)
+4. Animation
+Animated objects (rotating fan, swinging door) in the rooms as needed.
+
+Rubric Instructions
+This rubric outlines the expectations and evaluation criteria for the final course project. It is
+designed to make grading transparent and to serve as a guide as you plan and complete your
+work. Please review each category carefully and use it as a checklist to ensure that your
+project meets the standards for excellent performance
+Runnable source code (HTML/JavaScript files)
+• Short written report (3-5 pages) including:
+o Instructions to run the application
+o Description of implemented features
+o List of any external assets, textures, or libraries used
+o Known limitations or bugs
+o Screenshots or screen recording showing diVerent camera views
+
+
+3D Scene Design &
+Implementation
+Two or more distinct rooms with
+complete walls, floors, and ceilings. Realistic proportions,
+materials, and textures. Rooms are well-furnished and
+visually cohesive.
+
+Interactivity, Animation
+& Lighting
+Smooth camera navigation through all
+rooms; camera well-controlled; lighting realistic and
+dynamic; at least one animated or interactive object.
+
+Code, Report &
+Submission Quality
+Clean, modular, and well-commented
+code; project runs smoothly, includes clear demonstration
+(screenshots/video), and submission is well-organized.
