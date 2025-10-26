@@ -401,24 +401,26 @@ button:active {
 
             // Door (animated)
             var doorMaterial = new THREE.MeshStandardMaterial({ color: 0x654321, roughness: 0.6, metalness: 0.3 });
-            var doorGeometry = new THREE.BoxGeometry(wallThickness * 2, 7.8, doorwayWidth * 0.8);
+            // Make door thinner and fit snugly in frame
+            var doorThickness = frameThickness * 0.9; // slightly less than frame
+            var doorGeometry = new THREE.BoxGeometry(doorThickness, 7.8, doorwayWidth - frameThickness * 1.2);
             var doorMesh = new THREE.Mesh(doorGeometry, doorMaterial);
             doorMesh.castShadow = true;
             doorMesh.receiveShadow = true;
             var door = new THREE.Group();
-            door.position.set(-wallThickness, 4.1, -doorwayWidth / 2 + frameThickness);
-            doorMesh.position.set(0, 0, doorwayWidth * 0.8 / 2);
+            // Position door so it sits inside the frame
+            door.position.set(-wallThickness - (frameThickness - doorThickness)/2, 4.1, -doorwayWidth/2 + frameThickness/2);
+            doorMesh.position.set(0, 0, (doorwayWidth - frameThickness * 1.2)/2);
             door.add(doorMesh);
             scene.add(door);
             
             // Door handle (gold knob on living room side)
             var handleMaterial = new THREE.MeshStandardMaterial({ color: 0xffd700, roughness: 0.3, metalness: 0.9 });
-            
             // Spherical door knob
             var handleGeometry = new THREE.SphereGeometry(0.12, 16, 16);
             var handle = new THREE.Mesh(handleGeometry, handleMaterial);
-            // Position: living room side face (X = -wallThickness), at edge of door (Z), middle height (Y = 0)
-            handle.position.set(-wallThickness - 0.05, 0, doorwayWidth * 0.3);
+            // Position: living room side face (X = -doorThickness/2), at edge of door (Z), middle height (Y = 0)
+            handle.position.set(-doorThickness/2 - 0.05, 0, (doorwayWidth - frameThickness * 1.2) * 0.3);
             handle.castShadow = true;
             doorMesh.add(handle);
 
@@ -601,7 +603,7 @@ button:active {
                 new THREE.BoxGeometry(entranceFrameThickness, entranceFrameThickness, entranceDoorWidth),
                 entranceFrameMaterial
             );
-            entranceTopFrame.position.set(entranceDoorX, entranceDoorHeight + 0.2, entranceDoorZ);
+            entranceTopFrame.position.set(entranceDoorX, wallHeight - entranceFrameThickness / 2, entranceDoorZ);
             entranceTopFrame.castShadow = true;
             scene.add(entranceTopFrame);
             
@@ -610,7 +612,7 @@ button:active {
                 new THREE.BoxGeometry(entranceFrameThickness, 0.1, entranceDoorWidth),
                 entranceFrameMaterial
             );
-            entranceBottomFrame.position.set(entranceDoorX, 0.25, entranceDoorZ);
+            entranceBottomFrame.position.set(entranceDoorX, entranceFrameThickness / 2, entranceDoorZ);
             entranceBottomFrame.castShadow = true;
             scene.add(entranceBottomFrame);
             
@@ -619,7 +621,7 @@ button:active {
                 new THREE.BoxGeometry(entranceFrameThickness, entranceDoorHeight, entranceFrameThickness),
                 entranceFrameMaterial
             );
-            entranceFrontFrame.position.set(entranceDoorX, entranceDoorHeight / 2 + 0.2, entranceDoorZ + entranceDoorWidth / 2);
+            entranceFrontFrame.position.set(entranceDoorX, wallHeight / 2, entranceDoorZ + entranceDoorWidth / 2);
             entranceFrontFrame.castShadow = true;
             scene.add(entranceFrontFrame);
             
@@ -628,7 +630,7 @@ button:active {
                 new THREE.BoxGeometry(entranceFrameThickness, entranceDoorHeight, entranceFrameThickness),
                 entranceFrameMaterial
             );
-            entranceBackFrame.position.set(entranceDoorX, entranceDoorHeight / 2 + 0.2, entranceDoorZ - entranceDoorWidth / 2);
+            entranceBackFrame.position.set(entranceDoorX, wallHeight / 2, entranceDoorZ - entranceDoorWidth / 2);
             entranceBackFrame.castShadow = true;
             scene.add(entranceBackFrame);
             
@@ -644,7 +646,7 @@ button:active {
             entranceDoorMesh.receiveShadow = true;
             
             var entranceDoor = new THREE.Group();
-            entranceDoor.position.set(entranceDoorX + wallThickness / 2, entranceDoorHeight / 2 + 0.2, entranceDoorZ - entranceDoorWidth / 2);
+            entranceDoor.position.set(entranceDoorX + wallThickness / 2, (entranceDoorHeight - 0.1) / 2 + entranceFrameThickness / 2, entranceDoorZ - entranceDoorWidth / 2);
             entranceDoorMesh.position.set(0, 0, entranceDoorWidth / 2 - 0.05);
             entranceDoor.add(entranceDoorMesh);
             scene.add(entranceDoor);
