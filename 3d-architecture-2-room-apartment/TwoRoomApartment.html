@@ -1146,7 +1146,7 @@
             scene.add(tvScreen);
 
             // 4. Bookshelf - On right side near front wall
-            var shelfMaterial = new THREE.MeshStandardMaterial({ color: 0xa0522d, roughness: 0.7, metalness: 0.2 });
+            var shelfMaterial = new THREE.MeshStandardMaterial({ color: 0x1a1a1a, roughness: 0.7, metalness: 0.2 });
             var bookshelf = new THREE.Mesh(new THREE.BoxGeometry(1.4, 5, 2), shelfMaterial); // Thin bookshelf against wall
             bookshelf.position.set(-1, 2.6, 5.2); // Adjusted to sit on floor (0.1 + 2.5)
             bookshelf.castShadow = true;
