@@ -268,10 +268,13 @@
             renderer.setSize(window.innerWidth, window.innerHeight);
             renderer.shadowMap.enabled = true;
             renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+            // Fix z-fighting issues by enabling depth sorting and better precision
+            renderer.sortObjects = true;
+            renderer.capabilities.logarithmicDepthBuffer = true;
             // Color and tone mapping for more natural lighting
             if (THREE.sRGBEncoding) renderer.outputEncoding = THREE.sRGBEncoding;
             if (THREE.ACESFilmicToneMapping) renderer.toneMapping = THREE.ACESFilmicToneMapping;
-            renderer.toneMappingExposure = 1.05; // slight boost without overexposing
+            renderer.toneMappingExposure = 1.05; // slight boost without overexposure
             container.appendChild(renderer.domElement);
 
             var controls = new THREE.OrbitControls(camera, renderer.domElement);
@@ -327,6 +330,47 @@
             function createWall(width, height, depth, material) {
                 var geometry = new THREE.BoxGeometry(width, height, depth);
                 var wall = new THREE.Mesh(geometry, material);
+                wall.castShadow = true;
+                wall.receiveShadow = true;
+                return wall;
+            }
+
+            // Function to create wall with window openings
+            function createWallWithWindows(width, height, depth, material, windowPositions) {
+                var wallShape = new THREE.Shape();
+                
+                // Create outer wall rectangle
+                wallShape.moveTo(-width/2, -height/2);
+                wallShape.lineTo(width/2, -height/2);
+                wallShape.lineTo(width/2, height/2);
+                wallShape.lineTo(-width/2, height/2);
+                wallShape.lineTo(-width/2, -height/2);
+                
+                // Create holes for windows
+                if (windowPositions) {
+                    windowPositions.forEach(function(window) {
+                        var hole = new THREE.Path();
+                        var holeX = window.x;
+                        var holeY = window.y;
+                        var holeWidth = window.width;
+                        var holeHeight = window.height;
+                        
+                        hole.moveTo(holeX - holeWidth/2, holeY - holeHeight/2);
+                        hole.lineTo(holeX + holeWidth/2, holeY - holeHeight/2);
+                        hole.lineTo(holeX + holeWidth/2, holeY + holeHeight/2);
+                        hole.lineTo(holeX - holeWidth/2, holeY + holeHeight/2);
+                        hole.lineTo(holeX - holeWidth/2, holeY - holeHeight/2);
+                        
+                        wallShape.holes.push(hole);
+                    });
+                }
+                
+                var wallGeometry = new THREE.ExtrudeGeometry(wallShape, {
+                    depth: depth,
+                    bevelEnabled: false
+                });
+                
+                var wall = new THREE.Mesh(wallGeometry, material);
                 wall.castShadow = true;
                 wall.receiveShadow = true;
                 return wall;
@@ -506,6 +550,14 @@
                 roughness: 0.9,
                 metalness: 0.0
             });
+
+            // Back wall material with dim warm light beige color
+            var backWallMaterial = new THREE.MeshStandardMaterial({
+                color: 0xD4C29A, // Dim Warm Light Beige (darker than #F5DEB3)
+                roughness: 0.8,
+                metalness: 0.0
+            });
+
             // Create dark brown oak wood texture
             function createWoodPlankTexture() {
                 var canvas = document.createElement('canvas');
@@ -862,19 +914,222 @@
 
 
 
-            // Back wall
-            var backWall = createWall(livingRoomWidth + bedroomWidth + wallThickness, wallHeight, wallThickness, wallMaterial);
-            backWall.position.set(-(livingRoomWidth - bedroomWidth) / 2, wallHeight / 2, -roomDepth / 2);
-            scene.add(backWall);
-            walls.push(backWall);
+            // Back wall with window openings (segmented to preserve brick texture)
+            var totalWallWidth = livingRoomWidth + bedroomWidth + wallThickness;
+            var wallStartX = -(livingRoomWidth - bedroomWidth) / 2 - totalWallWidth / 2;
+            
+            // Window 1: x=-14, width=3.5, height=4, y=4 to 8
+            // Window 2: x=-6, width=3.5, height=4, y=4 to 8
+            
+            // Left segment (from wall start to first window)
+            var leftSegmentWidth = (-14 - 3.5/2) - wallStartX;
+            if (leftSegmentWidth > 0) {
+                var leftSegment = createWall(leftSegmentWidth, wallHeight, wallThickness, backWallMaterial);
+                leftSegment.position.set(wallStartX + leftSegmentWidth/2, wallHeight / 2, -roomDepth / 2);
+                scene.add(leftSegment);
+                walls.push(leftSegment);
+            }
+            
+            // Middle segment (between the two windows)
+            var middleSegmentWidth = (-6 - 3.5/2) - (-14 + 3.5/2);
+            if (middleSegmentWidth > 0) {
+                var middleSegment = createWall(middleSegmentWidth, wallHeight, wallThickness, backWallMaterial);
+                middleSegment.position.set((-14 + 3.5/2) + middleSegmentWidth/2, wallHeight / 2, -roomDepth / 2);
+                scene.add(middleSegment);
+                walls.push(middleSegment);
+            }
+            
+            // Middle segment (from second living room window to bedroom window)
+            var bedroomWindowX = 4; // Position for bedroom window (moved more left)
+            var bedroomWindowWidth = 3.5; // Same width as living room windows
+            var middleRightSegmentWidth = (bedroomWindowX - bedroomWindowWidth/2) - (-6 + 3.5/2);
+            if (middleRightSegmentWidth > 0) {
+                var middleRightSegment = createWall(middleRightSegmentWidth, wallHeight, wallThickness, backWallMaterial);
+                middleRightSegment.position.set((-6 + 3.5/2) + middleRightSegmentWidth/2, wallHeight / 2, -roomDepth / 2);
+                scene.add(middleRightSegment);
+                walls.push(middleRightSegment);
+            }
+            
+            // Right segment (from bedroom window to wall end)
+            var wallEndX = wallStartX + totalWallWidth;
+            var rightSegmentWidth = wallEndX - (bedroomWindowX + bedroomWindowWidth/2);
+            if (rightSegmentWidth > 0) {
+                var rightSegment = createWall(rightSegmentWidth, wallHeight, wallThickness, backWallMaterial);
+                rightSegment.position.set((bedroomWindowX + bedroomWindowWidth/2) + rightSegmentWidth/2, wallHeight / 2, -roomDepth / 2);
+                scene.add(rightSegment);
+                walls.push(rightSegment);
+            }
+            
+            // Top segments above windows (y=8 to wallHeight)
+            var topSegmentHeight = wallHeight - 8;
+            if (topSegmentHeight > 0) {
+                // Top segment above window 1 (living room)
+                var topSegment1 = createWall(3.5, topSegmentHeight, wallThickness, backWallMaterial);
+                topSegment1.position.set(-14, 8 + topSegmentHeight/2, -roomDepth / 2);
+                scene.add(topSegment1);
+                walls.push(topSegment1);
+                
+                // Top segment above window 2 (living room)
+                var topSegment2 = createWall(3.5, topSegmentHeight, wallThickness, backWallMaterial);
+                topSegment2.position.set(-6, 8 + topSegmentHeight/2, -roomDepth / 2);
+                scene.add(topSegment2);
+                walls.push(topSegment2);
+                
+                // Top segment above bedroom window
+                var topSegment3 = createWall(bedroomWindowWidth, topSegmentHeight, wallThickness, backWallMaterial);
+                topSegment3.position.set(bedroomWindowX, 8 + topSegmentHeight/2, -roomDepth / 2);
+                scene.add(topSegment3);
+                walls.push(topSegment3);
+            }
+            
+            // Bottom segments below windows (0 to y=4)
+            var bottomSegmentHeight = 4;
+            if (bottomSegmentHeight > 0) {
+                // Bottom segment below window 1 (living room)
+                var bottomSegment1 = createWall(3.5, bottomSegmentHeight, wallThickness, backWallMaterial);
+                bottomSegment1.position.set(-14, bottomSegmentHeight/2, -roomDepth / 2);
+                scene.add(bottomSegment1);
+                walls.push(bottomSegment1);
+                
+                // Bottom segment below window 2 (living room)
+                var bottomSegment2 = createWall(3.5, bottomSegmentHeight, wallThickness, backWallMaterial);
+                bottomSegment2.position.set(-6, bottomSegmentHeight/2, -roomDepth / 2);
+                scene.add(bottomSegment2);
+                walls.push(bottomSegment2);
+                
+                // Bottom segment below bedroom window
+                var bottomSegment3 = createWall(bedroomWindowWidth, bottomSegmentHeight, wallThickness, backWallMaterial);
+                bottomSegment3.position.set(bedroomWindowX, bottomSegmentHeight/2, -roomDepth / 2);
+                scene.add(bottomSegment3);
+                walls.push(bottomSegment3);
+            }
 
             // Windows function
+            // Realistic double-hung window function
+            function createDoubleHungWindow(width, height, x, y, z, rotationY) {
+                var windowGroup = new THREE.Group();
+                
+                // Brown window frame material (like your example)
+                var frameMaterial = new THREE.MeshPhongMaterial({ 
+                    color: 0x5a4a3f // Brown frame color
+                });
+                
+                // Individual frame pieces (top, bottom, left, right)
+                var frameTop = new THREE.Mesh(
+                    new THREE.BoxGeometry(width + 0.4, 0.2, 0.2), 
+                    frameMaterial
+                );
+                frameTop.position.set(0, height / 2 + 0.1, 0);
+                windowGroup.add(frameTop);
+                
+                var frameBottom = new THREE.Mesh(
+                    new THREE.BoxGeometry(width + 0.4, 0.2, 0.2), 
+                    frameMaterial
+                );
+                frameBottom.position.set(0, -height / 2 - 0.1, 0);
+                windowGroup.add(frameBottom);
+                
+                var frameLeft = new THREE.Mesh(
+                    new THREE.BoxGeometry(0.2, height + 0.2, 0.2), 
+                    frameMaterial
+                );
+                frameLeft.position.set(-width / 2 - 0.1, 0, 0);
+                windowGroup.add(frameLeft);
+                
+                var frameRight = new THREE.Mesh(
+                    new THREE.BoxGeometry(0.2, height + 0.2, 0.2), 
+                    frameMaterial
+                );
+                frameRight.position.set(width / 2 + 0.1, 0, 0);
+                windowGroup.add(frameRight);
+                
+                // Realistic glass material with improved settings
+                var glassMaterial = new THREE.MeshPhysicalMaterial({
+                    color: 0xffffff,
+                    opacity: 0.2,           // amount of transparency
+                    transparent: true,
+                    roughness: 0.1,
+                    metalness: 0.0,
+                    transmission: 1.0,      // real glass effect
+                    thickness: 0.5
+                });
+                
+                // Upper glass pane
+                var upperGlass = new THREE.Mesh(
+                    new THREE.BoxGeometry(width - 0.2, (height / 2) - 0.15, 0.02),
+                    glassMaterial
+                );
+                upperGlass.position.y = height / 4;
+                upperGlass.position.z = -0.05;
+                windowGroup.add(upperGlass);
+                
+                // Lower glass pane
+                var lowerGlass = new THREE.Mesh(
+                    new THREE.BoxGeometry(width - 0.2, (height / 2) - 0.15, 0.02),
+                    glassMaterial
+                );
+                lowerGlass.position.y = -height / 4;
+                lowerGlass.position.z = -0.05;
+                windowGroup.add(lowerGlass);
+                
+                // Sky/Outside view panel (creates illusion of seeing outside)
+                var skyMaterial = new THREE.MeshBasicMaterial({
+                    color: 0x87CEEB, // Sky blue
+                    transparent: true,
+                    opacity: 0.8
+                });
+                var skyPanel = new THREE.Mesh(
+                    new THREE.BoxGeometry(width - 0.3, height - 0.3, 0.01),
+                    skyMaterial
+                );
+                skyPanel.position.z = -0.15; // Behind the glass
+                windowGroup.add(skyPanel);
+                
+                // Add some cloud-like shapes for more realistic sky
+                var cloudMaterial = new THREE.MeshBasicMaterial({
+                    color: 0xFFFFFF, // White clouds
+                    transparent: true,
+                    opacity: 0.6
+                });
+                
+                // Create a few cloud shapes
+                for (var i = 0; i < 3; i++) {
+                    var cloud = new THREE.Mesh(
+                        new THREE.SphereGeometry(0.3, 8, 8),
+                        cloudMaterial
+                    );
+                    cloud.position.set(
+                        (Math.random() - 0.5) * (width - 1),
+                        (Math.random() - 0.5) * (height - 1) + 0.5,
+                        -0.14
+                    );
+                    cloud.scale.set(Math.random() + 0.5, 0.3, 0.3);
+                    windowGroup.add(cloud);
+                }
+                
+                // Horizontal divider bar (middle sash) - brown color
+                var sashMaterial = new THREE.MeshPhongMaterial({ color: 0x5a4a3f });
+                
+                var horizontalDivider = new THREE.Mesh(
+                    new THREE.BoxGeometry(width, 0.15, 0.2),
+                    sashMaterial
+                );
+                horizontalDivider.position.set(0, 0, 0); // Center of window
+                windowGroup.add(horizontalDivider);
+                
+                windowGroup.position.set(x, y, z);
+                if (rotationY) windowGroup.rotation.y = rotationY;
+                
+                return windowGroup;
+            }
+
+            // Original window function for bedroom windows
             function createWindow(width, height, x, y, z, rotationY) {
                 var windowGroup = new THREE.Group();
                 
                 // Window frame
-                var frameMaterial = new THREE.MeshStandardMaterial({ color: 0x8B4513, roughness: 0.7, metalness: 0.1 });
-                var frameThickness = 0.1;
+                var frameMaterial = new THREE.MeshStandardMaterial({ color: 0x4A4A4A, roughness: 0.3, metalness: 0.7 }); // Darker metallic frame
+                var frameThickness = 0.15; // Thicker frame for better visibility
                 
                 // Outer frame
                 var outerFrame = new THREE.Mesh(
@@ -887,9 +1142,9 @@
                 var glassMaterial = new THREE.MeshStandardMaterial({ 
                     color: 0x87CEEB, 
                     transparent: true, 
-                    opacity: 0.3, 
+                    opacity: 0.6, // Made more visible
                     roughness: 0.1, 
-                    metalness: 0.9 
+                    metalness: 0.2 // Reduced metalness for better visibility
                 });
                 var glass = new THREE.Mesh(
                     new THREE.BoxGeometry(width, height, 0.05),
@@ -917,12 +1172,16 @@
                 return windowGroup;
             }
 
-            // Add 2 windows to living room (back wall)
-            var livingWindow1 = createWindow(2.5, 3, -12, 6, -roomDepth / 2 + 0.05, 0);
+            // Add 2 double-hung windows to living room (back wall) - Classic style like in image
+            var livingWindow1 = createDoubleHungWindow(3.5, 4, -14, 6, -roomDepth / 2 + 0.2, 0);
             scene.add(livingWindow1);
             
-            var livingWindow2 = createWindow(2.5, 3, -6, 6, -roomDepth / 2 + 0.05, 0);
+            var livingWindow2 = createDoubleHungWindow(3.5, 4, -6, 6, -roomDepth / 2 + 0.2, 0);
             scene.add(livingWindow2);
+
+            // Add bedroom window (left side of bed) - Same specifications as living room windows
+            var bedroomWindow = createDoubleHungWindow(3.5, 4, bedroomWindowX, 6, -roomDepth / 2 + 0.2, 0);
+            scene.add(bedroomWindow);
 
             // Front wall (toggleable)
             frontWall = createWall(livingRoomWidth + bedroomWidth + wallThickness, wallHeight, wallThickness, wallMaterial);
@@ -970,12 +1229,7 @@
             scene.add(rightWall);
             walls.push(rightWall);
 
-            // Add 2 windows to bedroom (right wall)
-            var bedroomWindow1 = createWindow(2.5, 3, bedroomWidth + wallThickness / 2 + 0.05, 6, -4, Math.PI / 2);
-            scene.add(bedroomWindow1);
-            
-            var bedroomWindow2 = createWindow(2.5, 3, bedroomWidth + wallThickness / 2 + 0.05, 6, 4, Math.PI / 2);
-            scene.add(bedroomWindow2);
+            // Bedroom windows removed as requested
 
             // Dividing wall with doorway
             var doorwayOffset = 2;
@@ -999,31 +1253,37 @@
             // Doorframe and door
             var frameMaterial = new THREE.MeshStandardMaterial({ color: 0x8b4513, roughness: 0.7, metalness: 0.2 });
             var frameThickness = 0.15;
-            var leftFrame = new THREE.Mesh(new THREE.BoxGeometry(frameThickness, 8, frameThickness), frameMaterial);
-            leftFrame.position.set(-wallThickness / 2, 4, -doorwayWidth / 2);
+            var leftFrame = new THREE.Mesh(new THREE.BoxGeometry(frameThickness * 2, 8, frameThickness * 2), frameMaterial);
+            leftFrame.position.set(-wallThickness / 2 + frameThickness / 2, 4, -doorwayWidth / 2 - frameThickness / 2);
             leftFrame.castShadow = true;
             scene.add(leftFrame);
-            var rightFrame = new THREE.Mesh(new THREE.BoxGeometry(frameThickness, 8, frameThickness), frameMaterial);
-            rightFrame.position.set(-wallThickness / 2, 4, doorwayWidth / 2);
+            var rightFrame = new THREE.Mesh(new THREE.BoxGeometry(frameThickness * 2, 8, frameThickness * 2), frameMaterial);
+            rightFrame.position.set(-wallThickness / 2 + frameThickness / 2, 4, doorwayWidth / 2 + frameThickness / 2);
             rightFrame.castShadow = true;
             scene.add(rightFrame);
-            var topFrame = new THREE.Mesh(new THREE.BoxGeometry(frameThickness, frameThickness, doorwayWidth), frameMaterial);
-            topFrame.position.set(-wallThickness / 2, 8, 0);
+            var topFrame = new THREE.Mesh(new THREE.BoxGeometry(frameThickness * 2, frameThickness, doorwayWidth + frameThickness * 2), frameMaterial);
+            topFrame.position.set(-wallThickness / 2 + frameThickness / 2, 8, 0);
             topFrame.castShadow = true;
             scene.add(topFrame);
+            
+            // Bottom frame (threshold)
+            var bottomFrame = new THREE.Mesh(new THREE.BoxGeometry(frameThickness * 2, frameThickness, doorwayWidth + frameThickness * 2), frameMaterial);
+            bottomFrame.position.set(-wallThickness / 2 + frameThickness / 2, frameThickness / 2, 0);
+            bottomFrame.castShadow = true;
+            scene.add(bottomFrame);
 
             // Door (animated)
             var doorMaterial = new THREE.MeshStandardMaterial({ color: 0x654321, roughness: 0.6, metalness: 0.3 });
             // Make door thinner and fit snugly in frame
             var doorThickness = frameThickness * 0.9; // slightly less than frame
-            var doorGeometry = new THREE.BoxGeometry(doorThickness, 7.8, doorwayWidth - frameThickness * 1.2);
+            var doorGeometry = new THREE.BoxGeometry(doorThickness, 7.8, doorwayWidth - frameThickness * 0.6); // Reduced gap for better fit
             var doorMesh = new THREE.Mesh(doorGeometry, doorMaterial);
             doorMesh.castShadow = true;
             doorMesh.receiveShadow = true;
             var door = new THREE.Group();
             // Position door so it sits inside the frame
-            door.position.set(-wallThickness - (frameThickness - doorThickness) / 2, 4.1, -doorwayWidth / 2 + frameThickness / 2);
-            doorMesh.position.set(0, 0, (doorwayWidth - frameThickness * 1.2) / 2);
+            door.position.set(-wallThickness - (frameThickness - doorThickness) / 2, 4.1, -doorwayWidth / 2 + frameThickness * 0.3);
+            doorMesh.position.set(0, 0, (doorwayWidth - frameThickness * 0.6) / 2);
             door.add(doorMesh);
             scene.add(door);
 
@@ -1033,9 +1293,16 @@
             var handleGeometry = new THREE.SphereGeometry(0.12, 16, 16);
             var handle = new THREE.Mesh(handleGeometry, handleMaterial);
             // Position: living room side face (X = -doorThickness/2), at edge of door (Z), middle height (Y = 0)
-            handle.position.set(-doorThickness / 2 - 0.05, 0, (doorwayWidth - frameThickness * 1.2) * 0.3);
+            handle.position.set(-doorThickness / 2 - 0.05, 0, (doorwayWidth - frameThickness * 0.6) * 0.3);
             handle.castShadow = true;
             doorMesh.add(handle);
+
+            // Door handle (gold knob on bedroom side)
+            var handleBedroom = new THREE.Mesh(handleGeometry, handleMaterial);
+            // Position: bedroom side face (X = +doorThickness/2), at edge of door (Z), middle height (Y = 0)
+            handleBedroom.position.set(doorThickness / 2 + 0.05, 0, (doorwayWidth - frameThickness * 0.6) * 0.3);
+            handleBedroom.castShadow = true;
+            doorMesh.add(handleBedroom);
 
             // --- Living Room Furniture ---
             var roomX = -livingRoomWidth / 2; // Living room center based on width
@@ -1047,34 +1314,34 @@
                 metalness: 0.15
             });
             var sofaBase = new THREE.Mesh(new THREE.BoxGeometry(2, 1, 4), sofaMaterial); // 2m wide (left-right), 4m deep (front-back)
-            sofaBase.position.set(-2, 0.6, -3.5);
+            sofaBase.position.set(-2, 0.6, -4.6); // Moved slightly back from wall
             sofaBase.castShadow = true;
             scene.add(sofaBase);
             var sofaBack = new THREE.Mesh(new THREE.BoxGeometry(0.3, 1.5, 4), sofaMaterial); // Back facing left
-            sofaBack.position.set(-1, 1.35, -3.5);
+            sofaBack.position.set(-1, 1.35, -4.6); // Moved slightly back from wall
             sofaBack.castShadow = true;
             scene.add(sofaBack);
             var armrestGeometry = new THREE.BoxGeometry(2, 1.5, 0.3); // Armrests perpendicular
             var armrestLeft = new THREE.Mesh(armrestGeometry, sofaMaterial);
-            armrestLeft.position.set(-2, 0.85, -5.5);
+            armrestLeft.position.set(-2, 0.85, -6.6); // Updated to match adjusted sofa position
             armrestLeft.castShadow = true;
             scene.add(armrestLeft);
             var armrestRight = new THREE.Mesh(armrestGeometry, sofaMaterial);
-            armrestRight.position.set(-2, 0.85, -1.5);
+            armrestRight.position.set(-2, 0.85, -2.6); // Updated to match adjusted sofa position
             armrestRight.castShadow = true;
             scene.add(armrestRight);
 
             // 2. Coffee Table (modern black with glass-like finish) - In front of sofa (back area)
             var tableMaterial = new THREE.MeshStandardMaterial({ color: 0x1a1a1a, roughness: 0.2, metalness: 0.9 });
             var tableTop = new THREE.Mesh(new THREE.BoxGeometry(1.5, 0.1, 2.5), tableMaterial); // 1.5m wide, 2.5m deep
-            tableTop.position.set(-5, 1.5, -3.5);
+            tableTop.position.set(-5, 1.5, -4.2); // Moved closer to wall
             tableTop.castShadow = true;
             scene.add(tableTop);
             var legGeometry = new THREE.CylinderGeometry(0.08, 0.08, 1.4, 16);
             var legPositions = [[-0.6, 0.7, -1], [0.6, 0.7, -1], [-0.6, 0.7, 1], [0.6, 0.7, 1]]; // Adjusted for rotated table
             for (var i = 0; i < legPositions.length; i++) {
                 var leg = new THREE.Mesh(legGeometry, tableMaterial);
-                leg.position.set(-5 + legPositions[i][0], legPositions[i][1], -3.5 + legPositions[i][2]);
+                leg.position.set(-5 + legPositions[i][0], legPositions[i][1], -4.2 + legPositions[i][2]); // Updated Z position
                 leg.castShadow = true;
                 scene.add(leg);
             }
@@ -1089,7 +1356,7 @@
                 new THREE.CylinderGeometry(0.08, 0.06, 0.15, 16),
                 cupMaterial
             );
-            cupBody.position.set(-4.7, 1.63, -3.2);
+            cupBody.position.set(-4.7, 1.63, -3.9); // Updated to match new table position
             cupBody.castShadow = true;
             scene.add(cupBody);
 
@@ -1103,14 +1370,14 @@
                 new THREE.CylinderGeometry(0.075, 0.075, 0.02, 16),
                 coffeeMaterial
             );
-            coffee.position.set(-4.7, 1.69, -3.2);
+            coffee.position.set(-4.7, 1.69, -3.9); // Updated to match new table position
             scene.add(coffee);
 
             // Cup handle
             var handleCurve = new THREE.TorusGeometry(0.05, 0.015, 8, 16, Math.PI);
             var cupHandle = new THREE.Mesh(handleCurve, cupMaterial);
             cupHandle.rotation.y = Math.PI / 2;
-            cupHandle.position.set(-4.7 + 0.09, 1.63, -3.2);
+            cupHandle.position.set(-4.7 + 0.09, 1.63, -3.9); // Updated to match new table position
             cupHandle.castShadow = true;
             scene.add(cupHandle);
 
@@ -1145,8 +1412,8 @@
             tvScreen.position.set(-18.88, 2.5, -3);
             scene.add(tvScreen);
 
-            // 4. Bookshelf - On right side near front wall
-            var shelfMaterial = new THREE.MeshStandardMaterial({ color: 0x1a1a1a, roughness: 0.7, metalness: 0.2 });
+            // 4. Bookshelf - On right side near front wall (changed to black)
+            var shelfMaterial = new THREE.MeshStandardMaterial({ color: 0x1a1a1a, roughness: 0.3, metalness: 0.6 });
             var bookshelf = new THREE.Mesh(new THREE.BoxGeometry(1.4, 5, 2), shelfMaterial); // Thin bookshelf against wall
             bookshelf.position.set(-1, 2.6, 5.2); // Adjusted to sit on floor (0.1 + 2.5)
             bookshelf.castShadow = true;
@@ -1161,11 +1428,291 @@
             // 5. Rug (modern dark burgundy with lower roughness) - Under sofa/table area in back
             var rugMaterial = new THREE.MeshStandardMaterial({ color: 0x6b1f1f, roughness: 0.7, metalness: 0.1 });
             var rug = new THREE.Mesh(new THREE.BoxGeometry(3.5, 0.05, 5), rugMaterial); // Wide rug for sofa area
-            rug.position.set(-3.5, 0.15, -3.5);
+            rug.position.set(-3.5, 0.15, -4.8); // Moved closer to wall to align with sofa
             rug.receiveShadow = true;
             scene.add(rug);
 
-            // 6. Ceiling Fan (Realistic Design)
+            // 6. Large Decorative Bulbous Flower Vase - Right side of living room
+            var vaseMaterial = new THREE.MeshStandardMaterial({ 
+                color: 0x8B4513, // Brown vase color with metal finish
+                roughness: 0.1, 
+                metalness: 0.8 // High metalness for metal line appearance
+            });
+            
+            // Create twisted spiral vase like in reference image - thinner and taller
+            var vaseGroup = new THREE.Group();
+            vaseGroup.position.set(-17, 0, -5.5);
+            
+            // Create the main twisted vase body with spiral ridges - increased height, reduced width
+            var vaseHeight = 3.2; // Increased from 2.5 to make it taller
+            var segments = 64; // High detail for smooth curves
+            var twists = 3.0; // Slightly more twists for the taller vase
+            
+            // Create multiple cylindrical sections that form the twisted shape
+            for (var i = 0; i < 25; i++) { // More sections for taller vase
+                var yPos = (i / 24) * vaseHeight;
+                var progress = yPos / vaseHeight;
+                
+                // Create the vase profile - much thinner overall
+                var radiusAtHeight;
+                if (progress < 0.1) {
+                    radiusAtHeight = 0.2 + progress * 1.2; // Thinner bottom flare
+                } else if (progress < 0.8) {
+                    radiusAtHeight = 0.3 + Math.sin(progress * Math.PI * 0.7) * 0.15; // Thinner curved body
+                } else {
+                    radiusAtHeight = 0.25 - (progress - 0.8) * 0.8; // Thinner top neck
+                }
+                
+                // Create ring geometry for this section
+                var ringGeometry = new THREE.CylinderGeometry(
+                    radiusAtHeight, 
+                    radiusAtHeight, 
+                    vaseHeight / 25, // Adjusted for more sections
+                    segments
+                );
+                
+                var ring = new THREE.Mesh(ringGeometry, vaseMaterial);
+                ring.position.y = yPos + 0.1;
+                
+                // Apply twist rotation
+                ring.rotation.y = progress * twists * Math.PI * 2;
+                
+                vaseGroup.add(ring);
+            }
+            
+            // Add spiral ridges to create the twisted pattern
+            for (var r = 0; r < 12; r++) {
+                var ridgeAngle = (r / 12) * Math.PI * 2;
+                
+                for (var s = 0; s < 50; s++) { // More segments for taller vase
+                    var sProgress = s / 49;
+                    var ridgeHeight = sProgress * vaseHeight;
+                    
+                    // Calculate radius at this height (same thinner profile as main body)
+                    var ridgeRadius;
+                    if (sProgress < 0.1) {
+                        ridgeRadius = 0.2 + sProgress * 1.2; // Thinner bottom flare
+                    } else if (sProgress < 0.8) {
+                        ridgeRadius = 0.3 + Math.sin(sProgress * Math.PI * 0.7) * 0.15; // Thinner curved body
+                    } else {
+                        ridgeRadius = 0.25 - (sProgress - 0.8) * 0.8; // Thinner top neck
+                    }
+                    
+                    // Create small ridge segment
+                    var ridgeGeometry = new THREE.BoxGeometry(0.015, vaseHeight / 50, 0.008); // Thinner ridges
+                    var ridge = new THREE.Mesh(ridgeGeometry, vaseMaterial);
+                    
+                    var currentAngle = ridgeAngle + sProgress * twists * Math.PI * 2;
+                    ridge.position.x = Math.cos(currentAngle) * (ridgeRadius + 0.01);
+                    ridge.position.z = Math.sin(currentAngle) * (ridgeRadius + 0.01);
+                    ridge.position.y = ridgeHeight + 0.1;
+                    
+                    ridge.rotation.y = currentAngle;
+                    
+                    vaseGroup.add(ridge);
+                }
+            }
+            
+            vaseGroup.castShadow = true;
+            vaseGroup.receiveShadow = true;
+            scene.add(vaseGroup);
+            
+            // Specific flower materials like in the image
+            var daisyCenterMaterial = new THREE.MeshStandardMaterial({ 
+                color: 0xffa500, // Orange daisy center
+                roughness: 0.6, 
+                metalness: 0.0 
+            });
+            var yellowDaisyPetalMaterial = new THREE.MeshStandardMaterial({ 
+                color: 0xdc143c, // Red daisy petals (changed from yellow)
+                roughness: 0.4, 
+                metalness: 0.0 
+            });
+            var redRoseMaterial = new THREE.MeshStandardMaterial({ 
+                color: 0xdc143c, // Deep red rose
+                roughness: 0.6, 
+                metalness: 0.0 
+            });
+            var stemMaterial = new THREE.MeshStandardMaterial({ 
+                color: 0x228b22, // Green stems
+                roughness: 0.9, 
+                metalness: 0.0 
+            });
+            var leafMaterial = new THREE.MeshStandardMaterial({ 
+                color: 0x2d5016, // Darker green leaves
+                roughness: 0.8, 
+                metalness: 0.0 
+            });
+            
+            // Create specific flowers like in the image - yellow daisies and red roses
+            
+            // Create abundant realistic sunflowers and daisies
+            for (var d = 0; d < 8; d++) {
+                var flowerStemHeight = 0.8 + Math.random() * 0.6; // Varied heights
+                var flowerStemGeometry = new THREE.CylinderGeometry(0.03, 0.04, flowerStemHeight, 12);
+                var flowerStem = new THREE.Mesh(flowerStemGeometry, stemMaterial);
+                
+                var flowerAngle = (d / 8) * Math.PI * 2 + (Math.random() - 0.5) * 0.8;
+                var flowerRadius = 0.08 + Math.random() * 0.15;
+                var flowerX = -17 + Math.cos(flowerAngle) * flowerRadius;
+                var flowerZ = -5.5 + Math.sin(flowerAngle) * flowerRadius;
+                
+                flowerStem.position.set(flowerX, 3.3 + flowerStemHeight/2, flowerZ);
+                flowerStem.castShadow = true;
+                scene.add(flowerStem);
+                
+                // Create large realistic flower heads
+                var flowerGroup = new THREE.Group();
+                
+                // Large flower center - more dimensional
+                var centerSize = 0.12 + Math.random() * 0.04;
+                var flowerCenterGeometry = new THREE.SphereGeometry(centerSize, 20, 20);
+                var flowerCenter = new THREE.Mesh(flowerCenterGeometry, daisyCenterMaterial);
+                flowerGroup.add(flowerCenter);
+                
+                // Create abundant layered petals for fullness
+                var petalLayers = 3;
+                for (var layer = 0; layer < petalLayers; layer++) {
+                    var petalsInLayer = 16 + layer * 8; // More petals per layer
+                    var layerRadius = 0.15 + layer * 0.08;
+                    
+                    for (var dp = 0; dp < petalsInLayer; dp++) {
+                        // Create fuller, more realistic petal shapes
+                        var petalGeometry = new THREE.BoxGeometry(0.025, 0.25 + layer * 0.05, 0.008);
+                        var flowerPetal = new THREE.Mesh(petalGeometry, yellowDaisyPetalMaterial);
+                        
+                        var petalAngle = (dp / petalsInLayer) * Math.PI * 2 + (Math.random() - 0.5) * 0.3;
+                        flowerPetal.position.set(
+                            Math.cos(petalAngle) * layerRadius, 
+                            (Math.random() - 0.5) * 0.05, 
+                            Math.sin(petalAngle) * layerRadius
+                        );
+                        flowerPetal.rotation.y = petalAngle;
+                        flowerPetal.rotation.x = (Math.random() - 0.5) * 0.4 - layer * 0.1;
+                        flowerPetal.rotation.z = (Math.random() - 0.5) * 0.3;
+                        flowerPetal.castShadow = true;
+                        flowerGroup.add(flowerPetal);
+                    }
+                }
+                
+                flowerGroup.position.set(flowerX, 3.3 + flowerStemHeight, flowerZ);
+                flowerGroup.rotation.y = Math.random() * Math.PI * 2; // Random orientation
+                flowerGroup.castShadow = true;
+                scene.add(flowerGroup);
+            }
+            
+            // Create multiple lush red roses
+            for (var r = 0; r < 5; r++) {
+                var roseStemHeight = 0.7 + Math.random() * 0.5;
+                var roseStemGeometry = new THREE.CylinderGeometry(0.03, 0.045, roseStemHeight, 12);
+                var roseStem = new THREE.Mesh(roseStemGeometry, stemMaterial);
+                
+                var roseAngle = (r / 5) * Math.PI * 2 + (Math.random() - 0.5) * 0.6;
+                var roseRadius = 0.06 + Math.random() * 0.12;
+                var roseX = -17 + Math.cos(roseAngle) * roseRadius;
+                var roseZ = -5.5 + Math.sin(roseAngle) * roseRadius;
+                
+                roseStem.position.set(roseX, 3.3 + roseStemHeight/2, roseZ);
+                roseStem.castShadow = true;
+                scene.add(roseStem);
+                
+                // Create full, realistic rose head
+                var roseGroup = new THREE.Group();
+                
+                // Rose center - more dimensional
+                var roseCenterGeometry = new THREE.SphereGeometry(0.06, 16, 16);
+                var roseCenter = new THREE.Mesh(roseCenterGeometry, redRoseMaterial);
+                roseGroup.add(roseCenter);
+                
+                // Create abundant layered rose petals for fullness
+                for (var rp = 0; rp < 5; rp++) { // 5 layers for full roses
+                    var petalCount = 12 + rp * 6; // Many more petals
+                    var petalRadius = 0.04 + rp * 0.025;
+                    var petalHeight = 0.1 + rp * 0.02;
+                    var petalWidth = 0.025 + rp * 0.008;
+                    
+                    for (var rp2 = 0; rp2 < petalCount; rp2++) {
+                        // Create fuller petal shapes
+                        var rosePetalGeometry = new THREE.BoxGeometry(petalWidth, petalHeight, 0.012);
+                        var rosePetal = new THREE.Mesh(rosePetalGeometry, redRoseMaterial);
+                        
+                        var rosePetalAngle = (rp2 / petalCount) * Math.PI * 2 + (Math.random() - 0.5) * 0.2;
+                        rosePetal.position.set(
+                            Math.cos(rosePetalAngle) * petalRadius, 
+                            -rp * 0.008 + (Math.random() - 0.5) * 0.02, 
+                            Math.sin(rosePetalAngle) * petalRadius
+                        );
+                        rosePetal.rotation.y = rosePetalAngle + (Math.random() - 0.5) * 0.3;
+                        rosePetal.rotation.x = -0.2 - rp * 0.15 + (Math.random() - 0.5) * 0.2;
+                        rosePetal.rotation.z = (Math.random() - 0.5) * 0.4;
+                        rosePetal.castShadow = true;
+                        roseGroup.add(rosePetal);
+                    }
+                }
+                
+                roseGroup.position.set(roseX, 3.3 + roseStemHeight, roseZ);
+                roseGroup.rotation.y = Math.random() * Math.PI * 2;
+                roseGroup.castShadow = true;
+                scene.add(roseGroup);
+            }
+            
+            // Add abundant green foliage and filler plants for lush, natural look
+            for (var l = 0; l < 15; l++) {
+                var leafStemHeight = 0.4 + Math.random() * 0.8;
+                var leafStemGeometry = new THREE.CylinderGeometry(0.015, 0.025, leafStemHeight, 8);
+                var leafStem = new THREE.Mesh(leafStemGeometry, stemMaterial);
+                
+                var leafAngle = (l / 15) * Math.PI * 2 + (Math.random() - 0.5) * 1.0;
+                var leafRadius = 0.03 + Math.random() * 0.18;
+                var leafX = -17 + Math.cos(leafAngle) * leafRadius;
+                var leafZ = -5.5 + Math.sin(leafAngle) * leafRadius;
+                
+                leafStem.position.set(leafX, 3.3 + leafStemHeight/2, leafZ);
+                leafStem.castShadow = true;
+                scene.add(leafStem);
+                
+                // Add multiple leaves per stem for fullness
+                for (var lf = 0; lf < 3 + Math.floor(Math.random() * 3); lf++) {
+                    var leafSize = 0.03 + Math.random() * 0.02;
+                    var leafGeometry = new THREE.BoxGeometry(leafSize, leafSize * 2.5, 0.008);
+                    var leaf = new THREE.Mesh(leafGeometry, leafMaterial);
+                    
+                    var leafHeight = leafStemHeight * (0.3 + lf * 0.25);
+                    var leafOffset = (Math.random() - 0.5) * 0.04;
+                    leaf.position.set(
+                        leafX + leafOffset, 
+                        3.3 + leafHeight, 
+                        leafZ + leafOffset
+                    );
+                    leaf.rotation.y = leafAngle + (Math.random() - 0.5) * 1.5;
+                    leaf.rotation.z = (Math.random() - 0.5) * 0.8;
+                    leaf.rotation.x = (Math.random() - 0.5) * 0.5;
+                    leaf.castShadow = true;
+                    scene.add(leaf);
+                }
+            }
+            
+            // Add small filler flowers for abundance
+            for (var sf = 0; sf < 12; sf++) {
+                var smallFlowerAngle = Math.random() * Math.PI * 2;
+                var smallFlowerRadius = 0.05 + Math.random() * 0.15;
+                var smallFlowerX = -17 + Math.cos(smallFlowerAngle) * smallFlowerRadius;
+                var smallFlowerZ = -5.5 + Math.sin(smallFlowerAngle) * smallFlowerRadius;
+                var smallFlowerHeight = 0.5 + Math.random() * 0.4;
+                
+                // Small colorful blooms
+                var smallBloomGeometry = new THREE.SphereGeometry(0.025 + Math.random() * 0.015, 12, 12);
+                var bloomColors = [0xff69b4, 0x98fb98, 0xffd700, 0xff6347]; // Pink, light green, gold, coral
+                var bloomColor = bloomColors[Math.floor(Math.random() * bloomColors.length)];
+                var bloomMaterial = new THREE.MeshStandardMaterial({ color: bloomColor, roughness: 0.4 });
+                var smallBloom = new THREE.Mesh(smallBloomGeometry, bloomMaterial);
+                
+                smallBloom.position.set(smallFlowerX, 3.3 + smallFlowerHeight, smallFlowerZ);
+                smallBloom.castShadow = true;
+                scene.add(smallBloom);
+            }
+
+            // 7. Ceiling Fan (Realistic Design)
             var fan = new THREE.Group();
             fan.position.set(roomX, 8.5, 0);
 
@@ -1311,38 +1858,36 @@
                 roughness: 0.6,
                 metalness: 0.3
             });
-            var entranceDoorGeometry = new THREE.BoxGeometry(0.1, entranceDoorHeight - 0.1, entranceDoorWidth - 0.1);
+            var entranceDoorGeometry = new THREE.BoxGeometry(0.1, entranceDoorHeight - 0.05, entranceDoorWidth - 0.05); // Reduced gaps for better fit
             var entranceDoorMesh = new THREE.Mesh(entranceDoorGeometry, entranceDoorMaterial);
             entranceDoorMesh.castShadow = true;
             entranceDoorMesh.receiveShadow = true;
 
             var entranceDoor = new THREE.Group();
-            entranceDoor.position.set(entranceDoorX + wallThickness / 2, (entranceDoorHeight - 0.1) / 2 + entranceFrameThickness / 2, entranceDoorZ - entranceDoorWidth / 2);
-            entranceDoorMesh.position.set(0, 0, entranceDoorWidth / 2 - 0.05);
+            entranceDoor.position.set(entranceDoorX + wallThickness / 2, (entranceDoorHeight - 0.05) / 2 + entranceFrameThickness / 2, entranceDoorZ - entranceDoorWidth / 2 + entranceFrameThickness / 2);
+            entranceDoorMesh.position.set(0, 0, (entranceDoorWidth - 0.05) / 2 - entranceFrameThickness / 2);
             entranceDoor.add(entranceDoorMesh);
             scene.add(entranceDoor);
 
-            // Entrance door handle (lever style, properly positioned)
+            // Entrance door handle (gold knob style, matching interior doors)
             var entranceHandleMaterial = new THREE.MeshStandardMaterial({
-                color: 0xc0c0c0,
+                color: 0xffd700,
                 roughness: 0.3,
                 metalness: 0.9
             });
 
-            // Handle base/knob on door surface
-            var entranceHandleKnob = new THREE.Mesh(
-                new THREE.SphereGeometry(0.1, 16, 16),
-                entranceHandleMaterial
-            );
-            entranceHandleKnob.position.set(0.06, 0, entranceDoorWidth * 0.25);
-            entranceDoorMesh.add(entranceHandleKnob);
+            // Gold door knob on interior side
+            var entranceHandleGeometry = new THREE.SphereGeometry(0.12, 16, 16);
+            var entranceHandleInterior = new THREE.Mesh(entranceHandleGeometry, entranceHandleMaterial);
+            entranceHandleInterior.position.set(0.06, 0, entranceDoorWidth * 0.25);
+            entranceHandleInterior.castShadow = true;
+            entranceDoorMesh.add(entranceHandleInterior);
 
-            // Handle lever (horizontal)
-            var entranceHandleGeometry = new THREE.CylinderGeometry(0.05, 0.05, 0.45, 16);
-            var entranceHandle = new THREE.Mesh(entranceHandleGeometry, entranceHandleMaterial);
-            entranceHandle.rotation.z = Math.PI / 2;
-            entranceHandle.position.set(0.28, 0, entranceDoorWidth * 0.25);
-            entranceDoorMesh.add(entranceHandle);
+            // Gold door knob on exterior side
+            var entranceHandleExterior = new THREE.Mesh(entranceHandleGeometry, entranceHandleMaterial);
+            entranceHandleExterior.position.set(-0.06, 0, entranceDoorWidth * 0.25);
+            entranceHandleExterior.castShadow = true;
+            entranceDoorMesh.add(entranceHandleExterior);
 
             // Door panels (decorative)
             var panelMaterial = new THREE.MeshStandardMaterial({
@@ -1510,35 +2055,41 @@
                 roughness: 0.3,
                 metalness: 0.2
             });
-
-            // NYC Cityscape frame (wide landscape format)
-            var frame1 = new THREE.Mesh(new THREE.BoxGeometry(2.0, 1.3, 0.05), frameMat);
-            frame1.position.set(roomX - 3, 5, -4.85);
+/*
+            // NYC Cityscape frame (wide landscape format) - Bedroom left wall
+            var frame1 = new THREE.Mesh(new THREE.BoxGeometry(0.05, 1.3, 2.0), frameMat);
+            frame1.position.set(wallThickness / 2 + 0.025, 6, -2);
             frame1.castShadow = true;
+            frame1.rotation.y = -Math.PI / 2; // Rotate to face into bedroom
             scene.add(frame1);
-            var art1 = new THREE.Mesh(new THREE.BoxGeometry(1.8, 1.1, 0.02), artMat1);
-            art1.position.set(roomX - 3, 5, -4.82);
+            var art1 = new THREE.Mesh(new THREE.BoxGeometry(0.02, 1.1, 1.8), artMat1);
+            art1.position.set(wallThickness / 2 + 0.04, 6, -2);
+            art1.rotation.y = -Math.PI / 2; // Rotate to face into bedroom
             scene.add(art1);
 
-            // Eiffel Tower frame (portrait format)
-            var frame2 = new THREE.Mesh(new THREE.BoxGeometry(1.0, 1.6, 0.05), frameMat);
-            frame2.position.set(roomX + 2, 5.5, -4.85);
+            // Eiffel Tower frame (portrait format) - Bedroom left wall
+            var frame2 = new THREE.Mesh(new THREE.BoxGeometry(0.05, 1.6, 1.0), frameMat);
+            frame2.position.set(wallThickness / 2 + 0.025, 5.5, 0);
             frame2.castShadow = true;
+            frame2.rotation.y = -Math.PI / 2; // Rotate to face into bedroom
             scene.add(frame2);
-            var art2 = new THREE.Mesh(new THREE.BoxGeometry(0.8, 1.4, 0.02), artMat2);
-            art2.position.set(roomX + 2, 5.5, -4.82);
+            var art2 = new THREE.Mesh(new THREE.BoxGeometry(0.02, 1.4, 0.8), artMat2);
+            art2.position.set(wallThickness / 2 + 0.04, 5.5, 0);
+            art2.rotation.y = -Math.PI / 2; // Rotate to face into bedroom
             scene.add(art2);
 
-            // Toronto Skyline frame (wide landscape format)
-            var frame3 = new THREE.Mesh(new THREE.BoxGeometry(1.5, 1.0, 0.05), frameMat);
-            frame3.position.set(roomX + 6, 4.5, -4.85);
+            // Toronto Skyline frame (wide landscape format) - Bedroom left wall
+            var frame3 = new THREE.Mesh(new THREE.BoxGeometry(0.05, 1.0, 1.5), frameMat);
+            frame3.position.set(wallThickness / 2 + 0.025, 4.5, 4);
             frame3.castShadow = true;
+            frame3.rotation.y = -Math.PI / 2; // Rotate to face into bedroom
             scene.add(frame3);
-            var art3 = new THREE.Mesh(new THREE.BoxGeometry(1.3, 0.8, 0.02), artMat3);
-            art3.position.set(roomX + 6, 4.5, -4.82);
+            var art3 = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.8, 1.3), artMat3);
+            art3.position.set(wallThickness / 2 + 0.04, 4.5, 4);
+            art3.rotation.y = -Math.PI / 2; // Rotate to face into bedroom
             scene.add(art3);
 
-            // Bedroom photo frame on back wall
+            // Bedroom photo frame on right wall - touching the wall
             var photoFrameMat = new THREE.MeshStandardMaterial({
                 color: 0xffffff,
                 roughness: 0.2,
@@ -1551,13 +2102,16 @@
                 emissive: 0x2c3e50,
                 emissiveIntensity: 0.1
             });
-            var photoFrame = new THREE.Mesh(new THREE.BoxGeometry(1, 1.2, 0.05), photoFrameMat);
-            photoFrame.position.set(roomX2 - 1, 4, -4.85);
+            var photoFrame = new THREE.Mesh(new THREE.BoxGeometry(0.05, 1.2, 1), photoFrameMat);
+            photoFrame.position.set(bedroomWidth + wallThickness / 2 - 0.025, 4, 2);
             photoFrame.castShadow = true;
+            photoFrame.rotation.y = Math.PI / 2; // Rotate to face into room
             scene.add(photoFrame);
-            var photo = new THREE.Mesh(new THREE.BoxGeometry(0.8, 1.0, 0.02), photoMat);
-            photo.position.set(roomX2 - 1, 4, -4.82);
-            scene.add(photo);
+            var photo = new THREE.Mesh(new THREE.BoxGeometry(0.02, 1.0, 0.8), photoMat);
+            photo.position.set(bedroomWidth + wallThickness / 2 - 0.04, 4, 2);
+            photo.rotation.y = Math.PI / 2; // Rotate to face into room
+            scene.add(photo);8
+            */
 
             // --- Bedroom Furniture ---
             var roomX2 = bedroomWidth / 2; // Bedroom center depends on configured width
@@ -1825,24 +2379,24 @@
             pillow2.castShadow = true;
             scene.add(pillow2);
 
-            // 2. Wardrobe (modern dark with metallic accents)
+            // 2. Wardrobe (modern dark with metallic accents) - increased size
             var wardrobeMaterial = new THREE.MeshStandardMaterial({ color: 0x2a2a2a, roughness: 0.3, metalness: 0.6 });
-            var wardrobeWidthX = 2.2; // narrower to fit room width
-            var wardrobe = new THREE.Mesh(new THREE.BoxGeometry(wardrobeWidthX, 6, 1), wardrobeMaterial);
-            // Place against back wall aligned with headboard
+            var wardrobeWidthX = 3.0; // increased width for larger presence
+            var wardrobe = new THREE.Mesh(new THREE.BoxGeometry(wardrobeWidthX, 7.5, 1.2), wardrobeMaterial);
+            // Place against back wall aligned with headboard - adjusted for larger size
             var wardrobeX = bedroomWidth + wallThickness / 2 - wardrobeWidthX / 2 - 0.25;
             var wardrobeZ = -3.8 - (queenFrameDepth / 2) - 0.2; // Same as headboard position
-            wardrobe.position.set(wardrobeX, 3.1, wardrobeZ);
+            wardrobe.position.set(wardrobeX, 3.75, wardrobeZ); // Raised to accommodate increased height
             wardrobe.castShadow = true;
             scene.add(wardrobe);
             var handleMat = new THREE.MeshStandardMaterial({ color: 0x95a5a6, roughness: 0.2, metalness: 0.9 });
-            var handle1 = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.35, 16), handleMat);
+            var handle1 = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.4, 16), handleMat);
             handle1.rotation.z = Math.PI / 2;
-            handle1.position.set(wardrobeX - 0.35, 3.5, wardrobeZ - 0.5); // Aligned with wardrobe
+            handle1.position.set(wardrobeX - 0.5, 4.0, wardrobeZ - 0.6); // Adjusted for larger wardrobe
             scene.add(handle1);
-            var handle2 = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.35, 16), handleMat);
+            var handle2 = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.4, 16), handleMat);
             handle2.rotation.z = Math.PI / 2;
-            handle2.position.set(wardrobeX + 0.35, 3.5, wardrobeZ - 0.5); // Aligned with wardrobe
+            handle2.position.set(wardrobeX + 0.5, 4.0, wardrobeZ - 0.6); // Adjusted for larger wardrobe
             scene.add(handle2);
 
             // 3. Nightstand & Enhanced Lamp
@@ -1900,14 +2454,14 @@
 
             // 4. Desk (moved to bedroom right corner)
             var deskTop = new THREE.Mesh(new THREE.BoxGeometry(2.5, 0.1, 1.2), nightstandMaterial);
-            deskTop.position.set(15.5, 2, 7.5);
+            deskTop.position.set(15.5, 2, 6.2); // Moved closer to chair
             deskTop.castShadow = true;
             scene.add(deskTop);
             var deskLegGeometry = new THREE.BoxGeometry(0.1, 2, 0.1);
             var deskLegPositions = [[-1.1, 1, -0.5], [1.1, 1, -0.5], [-1.1, 1, 0.5], [1.1, 1, 0.5]];
             for (var d = 0; d < deskLegPositions.length; d++) {
                 var dleg = new THREE.Mesh(deskLegGeometry, nightstandMaterial);
-                dleg.position.set(15.5 + deskLegPositions[d][0], deskLegPositions[d][1], 7.5 + deskLegPositions[d][2]);
+                dleg.position.set(15.5 + deskLegPositions[d][0], deskLegPositions[d][1], 6.2 + deskLegPositions[d][2]); // Updated to match new desk position
                 dleg.castShadow = true;
                 scene.add(dleg);
             }
@@ -1930,6 +2484,109 @@
                 cleg.castShadow = true;
                 scene.add(cleg);
             }
+
+            // --- Bedroom AC Unit (Right Wall) ---
+            var acGroup = new THREE.Group();
+            // Position AC touching the right wall of the bedroom
+            var acX = bedroomWidth - 0.4; // Close to right wall at x=18, accounting for AC depth
+            var acY = 8.5; // High on wall (same height as living room fan)
+            var acZ = 0; // Center along the wall
+            acGroup.position.set(acX, acY, acZ);
+            acGroup.rotation.y = Math.PI; // Rotate to face toward the left wall (dividing wall)
+            scene.add(acGroup);
+
+            // Minimal wall mounting brackets - clean design
+            var bracketMaterial = new THREE.MeshStandardMaterial({
+                color: 0xf8f8f8,
+                roughness: 0.2,
+                metalness: 0.1
+            });
+            
+            // Left mounting bracket - smaller and cleaner
+            var leftBracket = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.3, 0.15), bracketMaterial);
+            leftBracket.position.set(-0.42, 0, -1.8);
+            leftBracket.castShadow = false;
+            acGroup.add(leftBracket);
+            
+            // Right mounting bracket - smaller and cleaner
+            var rightBracket = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.3, 0.15), bracketMaterial);
+            rightBracket.position.set(-0.42, 0, 1.8);
+            rightBracket.castShadow = false;
+            acGroup.add(rightBracket);
+
+            // AC Unit body (main housing) - clean modern design
+            var acBodyMaterial = new THREE.MeshPhysicalMaterial({
+                color: 0xffffff, // Pure white for clean look
+                roughness: 0.1,
+                metalness: 0.02,
+                clearcoat: 0.8,
+                clearcoatRoughness: 0.05
+            });
+            
+            // AC body - sleek and streamlined with increased height
+            var acBodyGeometry = new THREE.BoxGeometry(0.6, 1.8, 4.0);
+            var acBody = new THREE.Mesh(acBodyGeometry, acBodyMaterial);
+            acBody.castShadow = true;
+            acBody.receiveShadow = true;
+            acGroup.add(acBody);
+
+            // Front air outlet grille - recessed into the body to avoid z-fighting
+            var acGrilleMaterial = new THREE.MeshStandardMaterial({
+                color: 0xe8e8e8,
+                roughness: 0.4,
+                metalness: 0.1
+            });
+            var acGrille = new THREE.Mesh(
+                new THREE.BoxGeometry(0.1, 1.6, 3.6),
+                acGrilleMaterial
+            );
+            acGrille.position.x = -0.05; // Recessed into body instead of overlapping front
+            acGrille.castShadow = false;
+            acGroup.add(acGrille);
+
+            // Horizontal vent slats - carved into the grille area
+            var acVentMaterial = new THREE.MeshStandardMaterial({ 
+                color: 0x333333, 
+                roughness: 0.6
+            });
+            
+            for (var v = 0; v < 15; v++) {
+                var vent = new THREE.Mesh(
+                    new THREE.BoxGeometry(0.12, 0.02, 3.4),
+                    acVentMaterial
+                );
+                vent.position.set(-0.04, -0.75 + (v * 0.1), 0);
+                vent.castShadow = false;
+                acGroup.add(vent);
+            }
+
+            // Small display panel on the side
+            var acDisplay = new THREE.Mesh(
+                new THREE.BoxGeometry(0.02, 0.15, 0.4),
+                new THREE.MeshStandardMaterial({ color: 0x1a1a1a, roughness: 0.2 })
+            );
+            acDisplay.position.set(0.31, 0.2, -1.6);
+            acGroup.add(acDisplay);
+
+            // Power LED indicator
+            var acLED = new THREE.Mesh(
+                new THREE.SphereGeometry(0.015, 8, 8),
+                new THREE.MeshBasicMaterial({ color: 0x00ff00 })
+            );
+            acLED.position.set(0.31, 0.05, -1.6);
+            acGroup.add(acLED);
+
+
+
+
+
+
+
+
+
+
+
+
 
             // --- Animation variables ---
             var fanRotating = true;
@@ -2103,12 +2760,12 @@
                 new THREE.Vector3(-1.2, 7, 3.2),
                 new THREE.Vector3(-1.0, 3, 5.6)
             );
-            // Bedroom doorway (inside)
+            // Bedroom doorway (inside) - looking toward living room
             createHotspot(
-                'Bedroom doorway (inside)',
+                'Back to living room',
                 1.5, -0.5,
-                new THREE.Vector3(3.0, 6.5, -0.2),
-                new THREE.Vector3(2.0, 3, -0.5)
+                new THREE.Vector3(-2.0, 6.5, -0.2),
+                new THREE.Vector3(-5.0, 3, -2.0)
             );
             // Bedroom center
             createHotspot(
@@ -2646,7 +3303,7 @@
         pillowMaterial=new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.9, metalness: 0.0 }); const
         pillow=new THREE.Mesh( new THREE.BoxGeometry(1, 0.3, 0.8), pillowMaterial ); pillow.position.set(roomX, 1.4,
         -3.5); pillow.castShadow=true; this.scene.add(pillow); // 2. Wardrobe const wardrobeMaterial=new
-        THREE.MeshStandardMaterial({ color: 0x4a4a4a, roughness: 0.6, metalness: 0.4 }); const wardrobe=new THREE.Mesh(
+        THREE.MeshStandardMaterial({ color: 0x1a1a1a, roughness: 0.6, metalness: 0.4 }); const wardrobe=new THREE.Mesh(
         new THREE.BoxGeometry(3, 6, 1), wardrobeMaterial ); wardrobe.position.set(roomX + 4, 3.2, -3);
         wardrobe.castShadow=true; this.scene.add(wardrobe); // Wardrobe handles const handleMaterial=new
         THREE.MeshStandardMaterial({ color: 0xc0c0c0, roughness: 0.3, metalness: 0.9 }); const handle1=new THREE.Mesh(
